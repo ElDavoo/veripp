@@ -12,6 +12,7 @@ M2 replaces this with a libclang-based slicer.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from dataclasses import dataclass, field
 
 _OPEN = {"(": ")", "[": "]", "{": "}", "<": ">"}
@@ -105,6 +106,12 @@ def empty_macros(source: str) -> set[str]:
 
 
 def collect_scalar_typedefs(source: str) -> dict[str, str]:
+    """Cached wrapper; the caller gets its own dict to mutate."""
+    return dict(_collect_scalar_typedefs_cached(source))
+
+
+@lru_cache(maxsize=8)
+def _collect_scalar_typedefs_cached(source: str) -> tuple[tuple[str, str], ...]:
     """Project-local aliases of scalar types: `typedef unsigned long mz_ulong;`.
 
     Only aliases that bottom out at a plain scalar are kept -- a typedef of a
@@ -143,7 +150,7 @@ def collect_scalar_typedefs(source: str) -> dict[str, str]:
             current = normalize_type(raw[current])
         if current in scalars and current != alias:
             resolved[alias] = current
-    return resolved
+    return tuple(resolved.items())
 
 
 class SignatureError(Exception):
@@ -252,6 +259,7 @@ class Signature:
 # ---------------------------------------------------------------- lexing ---
 
 
+@lru_cache(maxsize=8)
 def scrub(text: str) -> str:
     """Blank out comments and literal contents, preserving length and newlines.
 
@@ -344,6 +352,12 @@ _CLASS_RE = re.compile(r"\b(class|struct|union)\s+([A-Za-z_]\w*)\s*(?::[^;{]*)?\
 
 
 def find_class_ranges(scrubbed: str) -> list[_ClassRange]:
+    """Class/struct ranges in `scrubbed`. Cached: callers ask once per name."""
+    return list(_find_class_ranges_cached(scrubbed))
+
+
+@lru_cache(maxsize=8)
+def _find_class_ranges_cached(scrubbed: str) -> tuple[_ClassRange, ...]:
     ranges = []
     for m in _CLASS_RE.finditer(scrubbed):
         brace = scrubbed.index("{", m.end() - 1)
@@ -358,7 +372,7 @@ def find_class_ranges(scrubbed: str) -> list[_ClassRange]:
             )
         except SignatureError:
             continue
-    return ranges
+    return tuple(ranges)
 
 
 def _preceded_by_template(scrubbed: str, pos: int) -> bool:

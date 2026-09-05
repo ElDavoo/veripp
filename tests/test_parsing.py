@@ -445,3 +445,52 @@ class TestFunctionLikeMacros:
             "int real_one(int x) { return x; }\n"
         )
         assert function_definitions(src) == ["real_one"]
+
+
+class TestDerivedSourceFactsAreCached:
+    """`find_function` re-derived the whole file on every call.
+
+    scrub, find_class_ranges and collect_scalar_typedefs are each a full pass
+    over the source, and find_function ran all three per lookup. A whole-file
+    scan calls it once per name, so the cost was quadratic in file size times
+    function count: a 1.1 MB single-TU library took 0.30s per function and
+    hours for a tree. They are pure functions of the text, so they are cached
+    on it -- but two of them return containers, and a caller that mutated one
+    would corrupt every later lookup. Hence the copies.
+    """
+
+    SRC = (
+        "typedef unsigned long ul;\n"
+        "struct S { int a; };\n"
+        "int f(ul x) { return (int) x; }\n"
+    )
+
+    def test_typedefs_are_equal_across_calls(self):
+        from veripp.cppsig import collect_scalar_typedefs
+
+        assert collect_scalar_typedefs(self.SRC) == {"ul": "unsigned long"}
+        assert collect_scalar_typedefs(self.SRC) == {"ul": "unsigned long"}
+
+    def test_a_caller_mutating_the_typedefs_cannot_poison_the_cache(self):
+        from veripp.cppsig import collect_scalar_typedefs
+
+        first = collect_scalar_typedefs(self.SRC)
+        first["injected"] = "int"
+        assert "injected" not in collect_scalar_typedefs(self.SRC)
+
+    def test_a_caller_mutating_the_class_ranges_cannot_poison_the_cache(self):
+        from veripp.cppsig import find_class_ranges, scrub
+
+        scrubbed = scrub(self.SRC)
+        first = find_class_ranges(scrubbed)
+        assert [c.name for c in first] == ["S"]
+        first.clear()
+        assert [c.name for c in find_class_ranges(scrubbed)] == ["S"]
+
+    def test_the_signature_is_unchanged_by_caching(self):
+        from veripp.cppsig import find_function
+
+        one = find_function(self.SRC, "f")
+        two = find_function(self.SRC, "f")
+        assert one.name == two.name == "f"
+        assert [p.type for p in one.params] == [p.type for p in two.params]
