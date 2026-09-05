@@ -247,10 +247,31 @@ def generate(
     """
     options = options or HarnessOptions()
     text = source.read_text(encoding="utf-8")
-    signature = find_function(text, function)
     # Struct definitions usually live in the library's own header, not the .cpp
     # being targeted, so resolve types against both.
     preprocessed = preprocess_source(source, options) if options.preprocess else None
+    try:
+        signature = find_function(text, function)
+    except SignatureError:
+        # A body whose braces are split across the arms of an #if cannot be
+        # brace-matched in raw text: both arms contribute an opening brace and
+        # only one of them is ever closed. lwIP's httpd.c does this twice --
+        #
+        #     #if LWIP_HTTPD_SSI_RAW
+        #         {
+        #     #else
+        #         for (tag = 0; tag < httpd_num_tags; tag++) {
+        #     #endif
+        #
+        # and lost get_tag_insert and http_find_file to it, which looked in the
+        # report exactly like two functions veripp had tried and refused. When
+        # the preprocessor has already run, its output has the braces the
+        # compiler sees, so retry there. Raw text stays the default: the extent
+        # heuristics read PUTCHAR/INCPTR and the buffer sizes read macros, and
+        # both of those are gone once the preprocessor has been through.
+        if preprocessed is None:
+            raise
+        signature = find_function(preprocessed, function)
     if preprocessed is not None:
         _reject_if_compiled_out(source, signature.name, preprocessed)
     # Kept even when preprocessing: size macros only exist before the

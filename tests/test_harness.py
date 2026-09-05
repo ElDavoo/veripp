@@ -604,6 +604,58 @@ class TestCompiledOutCode:
         assert "scaled(x)" in generate(p, "scaled", HarnessOptions()).code
 
 
+class TestBracesSplitAcrossAnIf:
+    """Both arms of an #if can open a brace; only one of them ever closes.
+
+    lwIP's httpd.c writes the loop header itself under a conditional:
+
+        #if LWIP_HTTPD_SSI_RAW
+            {
+        #else
+            for (tag = 0; tag < httpd_num_tags; tag++) {
+        #endif
+
+    Counting braces in the raw text sees two opens and one close, so the body
+    match runs off the end of the file and the function is refused. That cost
+    get_tag_insert and http_find_file -- URI-to-file resolution -- and in the
+    scan report it read as two functions veripp had tried and could not model,
+    which is the failure mode that hides a surface by looking like coverage.
+    """
+
+    SRC = (
+        '#include "veripp/contracts.hpp"\n'
+        "int pick(int n) {\n"
+        "#if RAW_MODE\n"
+        "  {\n"
+        "#else\n"
+        "  for (int i = 0; i < n; i++) {\n"
+        "#endif\n"
+        "    n += 1;\n"
+        "  }\n"
+        "  return n;\n"
+        "}\n"
+    )
+
+    def _source(self, tmp_path):
+        p = tmp_path / "s.c"
+        p.write_text(self.SRC, encoding="utf-8")
+        return p
+
+    def test_the_preprocessed_text_is_used_when_raw_braces_do_not_match(self, tmp_path):
+        from veripp.harness import HarnessOptions, generate
+
+        code = generate(self._source(tmp_path), "pick", HarnessOptions(preprocess=True)).code
+        assert "pick(" in code
+
+    def test_without_preprocessing_it_still_refuses_rather_than_guessing(self, tmp_path):
+        """Raw text stays the default, so the unmatched brace is still an error."""
+        from veripp.cppsig import SignatureError
+        from veripp.harness import HarnessError, HarnessOptions, generate
+
+        with pytest.raises((HarnessError, SignatureError)):
+            generate(self._source(tmp_path), "pick", HarnessOptions())
+
+
 class TestSetupCalls:
     """A linked module's state is set up by its own init(), and nothing calls it.
 
