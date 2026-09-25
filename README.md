@@ -316,7 +316,9 @@ Built-in: `anthropic`, `openai`, `gemini`, `groq`, `together`, `deepseek`,
 same API — a self-hosted gateway, vLLM, Azure — works with
 `--llm-base-url https://…`. Defaults come from `$VERIPP_LLM_MODEL` and
 `$VERIPP_LLM_BASE_URL`; `veripp doctor` lists which providers have
-credentials.
+credentials. Triage runs only when one of these says so: a provider's API key
+in the environment — set for some other tool, perhaps — does not send your
+code anywhere on its own.
 
 A small model is a reasonable choice here: every proposal is re-checked by
 ESBMC, so a wrong guess costs a retry, not a wrong answer.
