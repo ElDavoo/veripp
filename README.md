@@ -338,7 +338,10 @@ and is not evidenced.
 
 The action installs ESBMC (the `weekly` build, since the release is unsound
 for a pattern veripp targets), runs `veripp doctor` so a broken checker fails
-the job rather than producing quiet non-proofs, then scans. Set `function:`
+the job rather than producing quiet non-proofs, then scans. It installs one on
+x86_64 Linux runners; anywhere else it uses an `esbmc` already on PATH. On
+macOS that means an earlier `brew install --HEAD esbmc` step, since the only
+sound macOS build is compiled from source. Set `function:`
 to verify one target, `args:` for `-I`/`-D`/`--link`/`--unwind`.
 
 A full workflow with a baseline and SARIF annotations on the pull-request
