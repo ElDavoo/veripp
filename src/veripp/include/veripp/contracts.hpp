@@ -89,7 +89,12 @@ static inline double veripp_finite_double(void) {
 
 #elif defined(VERIPP_RUNTIME_CHECKS)
 
+// This header is included from C as well as C++, and <cassert> is C++ only.
+#if defined(__cplusplus)
 #include <cassert>
+#else
+#include <assert.h>
+#endif
 #define VERIPP_REQUIRES(cond) assert((cond) && "precondition")
 #define VERIPP_ENSURES(cond) assert((cond) && "postcondition")
 #define VERIPP_ASSERT(cond) assert(cond)
