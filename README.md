@@ -245,10 +245,12 @@ an API call; `--no-llm` skips triage entirely.
 
 Repeat runs are cached: a second scan reuses verdicts for files that have not
 changed, which is what makes this affordable on every push rather than
-nightly. The cache key covers the file, the local headers it includes, any
-linked sources, the bounds, the harness options and the checker's own version
-— so a stale verdict cannot be served. `--no-cache` verifies everything;
-`--cache DIR` moves it.
+nightly. The cache key covers the file, every project header it reaches
+(through `-I` and `compile_commands.json` alike), any linked sources and
+force-included headers, the bounds, the harness options, and the checker and
+veripp themselves — identified by their bytes, not by a version string that
+does not change between builds — so a stale verdict cannot be served.
+`--no-cache` verifies everything; `--cache DIR` moves it.
 
 ### Adopting veripp on an existing codebase
 
