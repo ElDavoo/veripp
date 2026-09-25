@@ -382,8 +382,12 @@ explain the failure never appear on the diff. Findings covered by the
 baseline are uploaded as *suppressed* rather than omitted, so code scanning
 shows them as accepted rather than pretending they are gone.
 
-`fail-on: never` remains for a first look, but a check that can never fail is
-a check nobody reads.
+By default the job fails on a counterexample, and on a vacuous proof — a
+"verified" whose assumptions left nothing to check. A result that is
+inconclusive for any other reason (a bound, a timeout, a file the checker's
+frontend refused) only warns; `fail-on: inconclusive` fails on those too, so
+anything short of a proof is red. `fail-on: never` remains for a first look,
+but a check that can never fail is a check nobody reads.
 
 ## As a skill for coding agents
 
