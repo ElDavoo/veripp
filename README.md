@@ -297,6 +297,41 @@ rather than a real bug -- check it first.
 Add the defining source with `--link src/helper.cpp` (repeatable). That can
 be the difference between a false counterexample and a proof.
 
+### When the default harness asks the wrong question
+
+The generated harness makes choices a particular codebase may need made
+differently. Each of these flags except `--preprocess` changes what is
+verified, and the result's assumptions say how; `--preprocess` changes only
+how the source is read.
+
+```bash
+# A C API that hands out a handle: build the object with the library's own
+# constructor, call up to --max-calls of its functions on it in any order,
+# then free it. A use-after-free or double free found this way is about the
+# library, not about an object the harness made up.
+veripp verify src/list.c --sequence list_t
+veripp verify src/list.c --sequence list_t --sequence-call 'list_push*' --sequence-call 'list_pop*'
+
+# Object parameters built by the library's own constructors -- the functions
+# that return one, the solver choosing between them -- instead of every
+# combination of field values, most of which no caller can produce.
+veripp verify src/json.c --function json_object_get --constructors
+
+# A linked module whose state its own init() sets up, which nothing calls.
+veripp verify src/httpd.c --function parse_request --link src/mem.c --setup 'mem_init()'
+
+# `char *` parameters and fields that are bytes off the wire, not C strings:
+# no terminator is supplied, so a walk to NUL has nothing to stop it.
+veripp verify src/netbiosns.c --function name_decode --unterminated
+
+# Structs whose members sit inside #if: read the source as the compiler sees
+# it instead of refusing them. A function the configuration compiles out is
+# reported as "not in this build".
+veripp verify src/ppp/lcp.c --function lcp_input --preprocess
+```
+
+`veripp verify --help-all` describes each of them.
+
 ### Bring your own model
 
 Triage works with any provider, and veripp needs no extra packages for most

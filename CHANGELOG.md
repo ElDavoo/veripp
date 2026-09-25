@@ -7,6 +7,108 @@ veripp is a **bounded** proof, and it is only as good as the checker underneath
 it. `veripp doctor` probes that checker against known-failing programs on every
 run, and refuses to back results from one that cannot detect a planted bug.
 
+## Unreleased
+
+More of a real C library can be harnessed, and fewer of its counterexamples
+are about the harness rather than the library. Most of it came out of a bug
+hunt through lwIP, cJSON, parson, mbedTLS and others, reported in
+`benchmarks/`.
+
+### Added
+- **`veripp verify --sequence TYPE`** drives a C API the way its callers do.
+  It builds one object with any of the library's own constructors (the
+  solver picks), makes up to `--max-calls` calls to functions taking it, in
+  any order and with nondeterministic arguments, then frees it with the
+  library's deallocator. Every struct-graph false positive in the hunt came
+  from a harness inventing an object field by field, and an object the
+  library built itself cannot be in a state the library cannot reach.
+  `--sequence-call GLOB` narrows the calls to one subsystem. A function
+  taking a second handle of the same type is left out, with the reason
+  stated: nothing in its signature says whether it borrows the object or
+  takes it over.
+- **`--constructors`** builds object parameters by calling the library's
+  own constructors -- the functions that return one -- and lets the solver
+  choose between them, instead of filling every field. A type nothing
+  returns directly is reached through one that owns it, as parson's
+  `JSON_Object` is through a `JSON_Value`. Off by default: it puts an
+  allocation in front of every call, and two of parson's functions went from
+  a counterexample to a timeout under it.
+- **`--setup CALL`** (repeatable) runs a linked module's initialiser before
+  the function under test, and says so in the assumptions. Linking lwIP's
+  `mem.c` without `mem_init()` left its heap null, and the crash inside
+  `mem_malloc` was reported as a bug in httpd.
+- **`--unterminated`** models `char *` parameters and fields as bytes with
+  no terminator -- what a parser gets off the wire. Under the C-string
+  default veripp had reported lwIP's `netbiosns_name_decode` VERIFIED; with
+  the flag it finds the over-read on its own. Opt-in, because on a genuine
+  string API a counterexample under it is about the caller's contract, and
+  the assumptions say exactly that.
+- **`--preprocess`** takes its types from the preprocessed source,
+  so a struct with members inside `#if` is modelled as the configuration
+  builds it instead of refused. The function under test is still read from
+  the file as written, and veripp falls back to reading the text when no
+  compiler runs. A target the configuration compiles out is reported as "not
+  in this build" rather than blamed on its parameter types.
+- `scan` reports **length parameters that bound nothing**: paired with a
+  buffer the body uses, yet never read, or read only inside an assertion,
+  which is gone once assertions are compiled out. No solver is involved, so it also covers
+  functions veripp cannot harness. Three of the nine defects the hunt
+  confirmed had this shape. They are listed as leads, not findings.
+- `scan` lists writes before reads within a triage verdict, and labels which
+  is which, since a write past the end corrupts memory where a read may stop
+  at the next zero byte. The direction comes from ESBMC's wording or the
+  failing source line; where neither settles it the entry is left unlabelled.
+- On an arm64 host whose checker cannot parse ARM intrinsics, `doctor` says
+  so -- mbedTLS reaches `arm_neon.h` through its own headers -- and points at
+  the amd64 container image.
+
+### Changed
+- When triage blames the harness for a failure, veripp asks again with
+  `--multi-property` for a verdict on every property. ESBMC stops at the
+  first violation, so a harness artifact used to end the run with the rest
+  of the function unchecked, which read like a quiet result. Only results
+  that were about to be discarded pay for the extra run.
+- Harnesses model more of real C. Among the changes: a parse cursor's offset
+  stays inside its own buffer; `char *` and `unsigned char *` fields are
+  strings, as parameters already were; a `void *` field is memory rather
+  than null; every length in an object is bounded, not only the one paired
+  with a buffer; a struct that a file treats as the first member of a larger
+  one is built as the larger one, C's spelling of a base class; an in/out
+  `T **` holds one object; a backward DER cursor (`T **p` with `T *start`)
+  is modelled; a C struct or enum tag stays part of the type's name; a
+  callback member gets a no-op of its own signature, disclosed as
+  unmodelled; an allocator hook such as `parson_malloc = malloc` resolves to
+  the allocator, and a library's allocator table is copied rather than
+  filled at random; a fixed-size write, or a walk through an output buffer,
+  sizes that buffer, and a callee's requirement is carried back to its
+  wrapper; terminator evidence counts at any index, not only `[0]`. On
+  cJSON the allocator hooks, the parse cursor, `char *` fields and the
+  re-ask above took counterexamples from 33 to 4, with four more proofs, and
+  none of the 29 was a missed bug.
+- A struct with members inside `#if` is refused, with the reason, instead
+  of misparsed: nanopb's `pb_ostream_t` had come back with a member typed
+  `#endif void`, which the harness set to null. `--preprocess` is the way
+  through.
+- A failure on memory from an allocator the run had no body for -- commonly
+  one called through a swappable function pointer -- is classed as a harness
+  artifact, and the message names `--link` or compile_commands.json as the
+  way to check it properly.
+- A function-like macro is no longer counted, or refused, as a function.
+  lwIP's `vj.c` reported 30% of its functions harnessable when four of its
+  five harness fine.
+- An `extern` array declared without a size and not defined in the
+  translation unit is named in the assumptions: the checker has neither its
+  size nor its contents, and two lwIP PPP handlers had reported an
+  out-of-bounds read on such a table.
+
+### Fixed
+- The retry pass kept the read/write label of the property it replaced.
+- `veripp verify FILE` with no `--function` called every failure in the
+  file a harness artifact, because the file under test is the harness. Only
+  the diagnosis text was affected.
+- Checker wheels built on Windows recorded paths with backslashes, naming no
+  file in the archive.
+
 ## 0.5.0
 
 Fewer steps between a developer and a verified function.
@@ -213,8 +315,6 @@ Usable on a codebase that already has findings.
   scores 0/2 and over-reports real bugs, and no hosted model has been graded
   because nothing here has an API key. That last gap sits under the half of
   the product the name advertises, and one command closes it.
-- `npx veripp-skill` installs the agent skill with nothing but Node.
-
 - `npx veripp-skill` installs the agent skill with nothing but Node — into
   `./.claude/skills/veripp`, or `--global` for every project. It installs the
   skill, not the verifier, and says so: the verifier is a Python program
