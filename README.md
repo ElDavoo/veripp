@@ -463,17 +463,24 @@ and neither can the model that proposed them. Since the design lets an LLM
 suggest preconditions, that hole matters: a weak model fails toward
 over-constraining, and the solver applauds.
 
-So whenever a proof rests on assumptions, veripp re-runs the harness with a
-deliberately false assertion at the end. A reachable harness must fail it; if
-it verifies instead, nothing was checked:
+So every proof is re-run with a deliberately false assertion at the end of
+its harness — in `verify` and in `scan` alike, and whether or not the harness
+text shows an assumption, because the one that empties it can sit in the code
+under test, or be a bound veripp's own harness adds. A reachable harness must
+fail it; if it verifies instead, nothing was checked:
 
 ```
 Result: VACUOUS (nothing was actually checked)
   The assumptions made the call unreachable, so every property held trivially.
-  This is NOT a proof. Weaken the precondition(s) below until the harness can run.
+  This is NOT a proof. The conflict may be between the precondition(s) below,
+  or with a bound veripp's harness adds itself (a buffer length of at most
+  --max-array-len, say). Weaken the precondition, or raise that bound, until
+  the harness can run.
 ```
 
-It exits non-zero, so a vacuous proof can never pass CI.
+A probe that cannot settle — it times out, or the checker errors — does not
+count as reachable: the result is reported as UNCONFIRMED, which is not a
+proof either. Both exit 3, like any other inconclusive result.
 
 ### Container notes
 
