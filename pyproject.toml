@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "veripp"
-version = "0.5.0"
-description = "AI-operated formal verification for real C++ code (ESBMC + LLM agent loop)"
+version = "0.6.0"
+description = "AI-assisted bounded verification for C and C++ functions (ESBMC + optional LLM triage)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Giovanni Fabbretti" }]
-keywords = ["formal-verification", "model-checking", "esbmc", "cpp", "bmc", "llm"]
+keywords = ["formal-verification", "model-checking", "esbmc", "c", "cpp", "bmc", "llm", "memory-safety"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",

@@ -7,6 +7,79 @@ veripp is a **bounded** proof, and it is only as good as the checker underneath
 it. `veripp doctor` probes that checker against known-failing programs on every
 run, and refuses to back results from one that cannot detect a planted bug.
 
+## 0.6.0
+
+Fewer false counterexamples on real-world C, and new options for C APIs that
+the harness could not model before.
+
+### Added
+- **`--constructors`** builds object parameters by calling the library's own
+  constructors, and lets the solver choose between them, instead of filling
+  fields with arbitrary values. Handle types that no constructor returns are
+  reached through an owner that does. The object is freed with the library's
+  own deallocator. This is off by default because it costs solver time.
+- **`verify --sequence TYPE`** (with `--sequence-call GLOB`) constructs a C
+  handle, drives a bounded nondeterministic sequence of the API calls that
+  take it, and then frees it.
+- **`--preprocess`** runs the C preprocessor, so structs with members inside
+  `#if` blocks resolve to the configured build instead of being refused. When
+  the target function is compiled out, veripp now says "not in this build".
+- **`--setup CALL`** runs a linked module's initialiser before the function
+  under test, and records it in the assumptions.
+- **`--unterminated`** models `char *` parameters and fields as raw bytes
+  with no NUL terminator, for parsers that are handed data off the wire.
+- **`scan` lists length parameters a function never reads**, or reads only
+  inside an assertion, as leads to look at by hand.
+- **`scan` sorts writes before reads** within each triage verdict, and labels
+  each counterexample with its access kind.
+- **`doctor` warns on arm64 hosts** where ESBMC cannot parse ARM intrinsic
+  headers, and points to the `linux/amd64` container.
+
+### Changed: harness modelling
+- C strings: `char *` and `unsigned char *` are modelled as NUL-terminated
+  when the body treats them that way (including tests at any index and
+  struct fields). `const unsigned char *` defaults to binary data. Bounded
+  routines such as `strncmp` are no longer taken as evidence of a
+  terminator.
+- Lengths: the scan for a buffer's length stops at the next pointer
+  parameter. Signed lengths are assumed non-negative, and this is disclosed.
+  Every length field in an object is bounded, not only the first one.
+  Run-together names like `userlen` are paired with their buffer.
+- Output buffers with no length parameter are sized from fixed-size writes in
+  the body, from how far the body advances through them, and from the
+  requirements of callees they are passed to.
+- Cursors: `(T **p, T *start)` writers are modelled, in both directions. A
+  cursor struct's offset is kept within its own buffer.
+- C structs: `struct` tags are kept in declarations, and enum tags are
+  spelled out. A base struct placed first is modelled as the larger object
+  when the file uses it that way. `void *` fields become byte buffers
+  instead of null. Callback and vtable members get no-op stubs, and those
+  stubs are disclosed. In/out `T **` parameters hold one object.
+- Allocator hooks initialised to `malloc`/`free`, including struct tables of
+  hooks, are pointed at wrappers the checker can see through. The rewrite is
+  disclosed.
+- Extern arrays with no definition in scope are disclosed as unmodelled.
+- Function-like macros are no longer counted as function definitions, so
+  coverage percentages are correct. Body braces are matched as the compiler
+  sees them.
+
+### Changed: triage and reporting
+- A counterexample classified as a harness artifact is re-checked with
+  `--multi-property`, so whatever the artifact was hiding is still reported.
+- A counterexample that comes from an allocator with no body is classified as
+  an artifact only when such an allocator really is missing from the run.
+- A retried function no longer keeps its first attempt's read/write label.
+- `verify FILE` without `--function` no longer calls findings in the user's
+  own file harness artifacts.
+
+### Fixed
+- Wheels built on Windows now carry POSIX entry names. Also fixed: two
+  Windows-only test failures.
+- `scan` derives per-file facts once per file instead of once per function.
+
+### Docs
+- The README is shorter and restates only what the code does.
+
 ## 0.5.0
 
 Fewer steps between a developer and a verified function.
